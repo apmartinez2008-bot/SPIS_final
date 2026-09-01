@@ -1,0 +1,62 @@
+import cv2
+import numpy as np
+
+# Store points clicked by the user
+clicked_points = []
+
+def mouse_callback(event, x, y, flags, param):
+    """Tracks mouse clicks to define custom shapes."""
+    if event == cv2.EVENT_LBUTTONDOWN:
+        clicked_points.append((x, y))
+        print(f"Point added: ({x}, {y})")
+
+# Initialize webcam (0 is usually the default built-in camera)
+cap = cv2.VideoCapture(0)
+cv2.namedWindow("Webcam Constraints")
+cv2.setMouseCallback("Webcam Constraints", mouse_callback)
+
+print("Instructions:")
+print("1. Left-click 4 points in sequence to define a custom 'square'.")
+print("2. Press 'c' to clear your points.")
+print("3. Press 'q' to quit.")
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Create an overlay layer for transparent fills
+    overlay = frame.copy()
+
+    # Draw existing points
+    for point in clicked_points:
+        cv2.circle(frame, point, 5, (0, 0, 255), -1)
+
+    # If we have 4 points, draw the imperfect square and fill it
+    if len(clicked_points) >= 4:
+        # Reshape points for OpenCV polygon functions
+        pts = np.array(clicked_points[:4], np.int32)
+        pts = pts.reshape((-1, 1, 2))
+        
+        # 1. Fill the inside of the square (Semi-transparent Blue)
+        cv2.fillPoly(overlay, [pts], (255, 0, 0))
+        
+        # 2. Draw the outer boundary lines (Green)
+        cv2.polylines(frame, [pts], isClosed=True, color=(0, 255, 0), thickness=2)
+        
+        # Apply the transparent overlay back onto the frame
+        alpha = 0.4  # Transparency factor
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+    # Display the result
+    cv2.imshow("Webcam Constraints", frame)
+
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+    elif key == ord('c'):
+        clicked_points = []
+        print("Points cleared.")
+
+cap.release()
+cv2.destroyAllWindows()
