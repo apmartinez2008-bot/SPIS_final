@@ -1,2 +1,2 @@
 # SPIS_final
-Chess identifying camera 
+Chess/checkers identifying camera 
