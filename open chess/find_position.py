@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 def fen2board_all(fen_line):
-    """Tracks presence of ANY piece (White or Black) on the board."""
+    """Tracks presence of ANY piece on the board."""
     player_bool_position = []
     for row in fen_line.split(' ')[0].split('/'):
         bool_row = []
@@ -11,7 +11,7 @@ def fen2board_all(fen_line):
                 for i in range(int(cell)):
                     bool_row.append(0)
             else:
-                bool_row.append(1)  # Track both upper and lower case pieces
+                bool_row.append(1)
         player_bool_position.append(bool_row)
     return np.array(player_bool_position)
 
@@ -24,66 +24,86 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
     past_bool_position = fen2board_all(FEN_line)
     diff_position = np.zeros((8, 8), dtype=int)
 
-    # Calculate absolute difference between snapshots
+    # 1. Image Difference Analysis
     image_diff = cv2.absdiff(img_1, img_2)
     image_diff_gray = cv2.cvtColor(image_diff, cv2.COLOR_BGR2GRAY)
     
-    # LOWERED THRESHOLD: Increased sensitivity from 20 to 10
-    _, threshold = cv2.threshold(image_diff_gray, 17, 255, cv2.THRESH_BINARY)
+    # Thresholding for difference detection
+    _, threshold = cv2.threshold(image_diff_gray, 10, 255, cv2.THRESH_BINARY)
     cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Show threshold image for real-time debugging
+    # Show difference window for debugging
     cv2.imshow("Difference Debugger", threshold)
     cv2.waitKey(1)
 
     required_contours_mid_point = []
     for c in cnts:
-        # LOWERED CONTOUR AREA: Reduced from 300 to 80 for 640x480 resolution
-        if cv2.contourArea(c) > 80:
+        area = cv2.contourArea(c)
+        if area > 40:  # Lowered sensitivity threshold
             (x, y, w, h) = cv2.boundingRect(c)
-            required_contours_mid_point.append([x + int(w / 2), y + int(h / 2)])
+            mid_x, mid_y = x + int(w / 2), y + int(h / 2)
+            required_contours_mid_point.append([mid_x, mid_y])
 
-    if len(required_contours_mid_point) >= 2:
-        flag = np.zeros((8, 8), dtype=int)
-        
+    print(f"\n--- DEBUG MOVE ANALYSIS ---")
+    print(f"Phase 1: Found {len(required_contours_mid_point)} movement centroids.")
+
+    if len(required_contours_mid_point) < 2:
+        print("--> FAIL: Camera saw fewer than 2 movement points. Check lighting, hands in frame, or sensitivity.")
+        return " ", img_2, 0
+
+    # 2. Polygon Square Mapping
+    flag = np.zeros((8, 8), dtype=int)
+    mapped_count = 0
+    
+    for mid_point in required_contours_mid_point:
+        matched = False
         for (r, c), quad_corners in board_squares.items():
-            for mid_point in required_contours_mid_point:
-                if point_in_quad(mid_point, quad_corners) and flag[r][c] == 0:
+            if point_in_quad(mid_point, quad_corners):
+                matched = True
+                if flag[r][c] == 0:
                     diff_position[r][c] = 1
                     flag[r][c] = 1
+                    mapped_count += 1
+                    print(f"   -> Point {mid_point} matched to Grid Square ({r}, {c})")
+        if not matched:
+            print(f"   -> Point {mid_point} fell OUTSIDE all grid polygons!")
 
-        # Identify departing square (had piece, now changed) and arrival square
-        changed_squares = np.where(diff_position == 1)
-        
-        if len(changed_squares[0]) < 2:
-            print("Debug: Changes were detected, but they didn't fall inside 2 distinct grid squares.")
-            return " ", img_2, 0
+    changed_squares = np.where(diff_position == 1)
+    unique_squares_found = len(changed_squares[0])
+    print(f"Phase 2: Mapped points to {unique_squares_found} unique grid square(s).")
 
-        # Determine source (r1, c1) vs destination (r2, c2) based on past piece board
-        r1, c1, r2, c2 = -1, -1, -1, -1
-        
-        for idx in range(len(changed_squares[0])):
-            r = changed_squares[0][idx]
-            c = changed_squares[1][idx]
-            if past_bool_position[r][c] == 1 and r1 == -1:
-                r1, c1 = r, c
-            else:
-                r2, c2 = r, c
-
-        if r1 == -1 or r2 == -1:
-            return " ", img_2, 0
-        
-        print(f"Detected move from rank/col ({r1},{c1}) to ({r2},{c2})")
-        print(f"Mapped move notation: {number_to_position_map[r1][c1]} -> {number_to_position_map[r2][c2]}")
-        move_word = number_to_position_map[r1][c1] + number_to_position_map[r2][c2]
-
-        draw_img = img_2.copy()
-        pts1 = np.array(board_squares[(r1, c1)], np.int32).reshape((-1, 1, 2))
-        pts2 = np.array(board_squares[(r2, c2)], np.int32).reshape((-1, 1, 2))
-        cv2.polylines(draw_img, [pts1], True, (0, 0, 255), 2)
-        cv2.polylines(draw_img, [pts2], True, (0, 255, 0), 2)
-
-        return move_word, draw_img, 1
-    else:
-        print(f"Debug: Found {len(required_contours_mid_point)} valid motion contours. Need at least 2.")
+    if unique_squares_found < 2:
+        print("--> FAIL: Movements detected, but they didn't land in 2 separate grid squares.")
         return " ", img_2, 0
+
+    # 3. Square Source vs Destination Identification
+    sq1 = (changed_squares[0][0], changed_squares[1][0])
+    sq2 = (changed_squares[0][1], changed_squares[1][1])
+
+    if past_bool_position[sq1[0]][sq1[1]] == 1 and past_bool_position[sq2[0]][sq2[1]] == 0:
+        r1, c1 = sq1
+        r2, c2 = sq2
+    elif past_bool_position[sq2[0]][sq2[1]] == 1 and past_bool_position[sq1[0]][sq1[1]] == 0:
+        r1, c1 = sq2
+        r2, c2 = sq1
+    else:
+        # Fallback if both squares had pieces (captures) or neither did
+        r1, c1 = sq1
+        r2, c2 = sq2
+
+    raw_from = f"({r1},{c1})"
+    raw_to = f"({r2},{c2})"
+    notation_from = number_to_position_map[r1][c1]
+    notation_to = number_to_position_map[r2][c2]
+    move_word = notation_from + notation_to
+
+    print(f"Phase 3: Source {raw_from} [{notation_from}] -> Destination {raw_to} [{notation_to}]")
+    print(f"Phase 4: Generated Move Command -> '{move_word}'")
+
+    draw_img = img_2.copy()
+    pts1 = np.array(board_squares[(r1, c1)], np.int32).reshape((-1, 1, 2))
+    pts2 = np.array(board_squares[(r2, c2)], np.int32).reshape((-1, 1, 2))
+    cv2.polylines(draw_img, [pts1], True, (0, 0, 255), 2)
+    cv2.polylines(draw_img, [pts2], True, (0, 255, 0), 2)
+
+    return move_word, draw_img, 1
