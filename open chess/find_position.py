@@ -29,7 +29,7 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
     image_diff_gray = cv2.cvtColor(image_diff, cv2.COLOR_BGR2GRAY)
     
     # LOWERED THRESHOLD: Increased sensitivity from 20 to 10
-    _, threshold = cv2.threshold(image_diff_gray, 15, 255, cv2.THRESH_BINARY)
+    _, threshold = cv2.threshold(image_diff_gray, 17, 255, cv2.THRESH_BINARY)
     cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Show threshold image for real-time debugging
@@ -72,7 +72,9 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
 
         if r1 == -1 or r2 == -1:
             return " ", img_2, 0
-
+        
+        print(f"Detected move from rank/col ({r1},{c1}) to ({r2},{c2})")
+        print(f"Mapped move notation: {number_to_position_map[r1][c1]} -> {number_to_position_map[r2][c2]}")
         move_word = number_to_position_map[r1][c1] + number_to_position_map[r2][c2]
 
         draw_img = img_2.copy()
