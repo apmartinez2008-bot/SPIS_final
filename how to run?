@@ -1,0 +1,103 @@
+
+To run CameraChessWeb on a Raspberry Pi with PiCam:
+
+Prerequisites
+Raspberry Pi 4 or 5 (recommended for performance)
+PiCamera 2 or compatible camera module
+Node.js 18+ installed on RPi
+Camera enabled in raspi-config
+Steps
+Install dependencies on RPi
+
+bash
+sudo apt update
+sudo apt install -y build-essential python3 git
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+Clone and setup
+
+bash
+git clone https://github.com/Pbatch/CameraChessWeb.git
+cd CameraChessWeb
+npm install
+Build for RPi
+
+bash
+npm run build
+Run development server
+
+bash
+npm run dev
+Access from RPi browser: http://localhost:5173
+Access from another device: http://<rpi-ip>:5173
+Camera Access on RPi
+The browser needs camera permissions. For headless/remote setups:
+
+Use libcamera (modern RPi OS) instead of legacy raspistill
+Enable camera in browser permissions
+May need to run with --use-fake-device-for-media-stream for testing
+Performance Considerations
+RPi 4: Should handle inference but may be slower
+RPi 5: Recommended for real-time piece detection
+Consider adding GPU acceleration with TensorFlow.js WebGL backend
+Monitor memory usage (RPi has limited RAM)
+Issues & Troubleshooting
+Check the project's Discord for RPi-specific setup help.
+
+through thonny
+To run CameraChessWeb on Raspberry Pi through Thonny:
+
+Setup
+Install Thonny on RPi
+
+bash
+sudo apt install thonny
+Open Thonny and configure Python interpreter
+
+Tools → Options → Interpreter
+Select system Python or create virtual environment
+Create a launcher script
+In Thonny, create a new file run_chesscam.py:
+
+Python
+import subprocess
+import webbrowser
+import time
+import os
+
+# Navigate to project directory
+os.chdir('/home/pi/CameraChessWeb')  # Adjust path as needed
+
+# Install dependencies if needed
+subprocess.run(['npm', 'install'], check=True)
+
+# Start dev server
+print("Starting CameraChessWeb dev server...")
+server = subprocess.Popen(['npm', 'run', 'dev'])
+
+# Wait for server to start
+time.sleep(5)
+
+# Open browser
+print("Opening browser to http://localhost:5173")
+webbrowser.open('http://localhost:5173')
+
+try:
+    # Keep server running
+    server.wait()
+except KeyboardInterrupt:
+    print("\nShutting down...")
+    server.terminate()
+Run in Thonny
+Click the Run button (or F5)
+Browser will auto-open to the app
+Alternative: Run terminal command from Thonny
+Python
+import subprocess
+subprocess.run(['npm', 'run', 'dev'], cwd='/home/pi/CameraChessWeb')
+Notes
+Thonny is primarily for Python - this project is Node.js/TypeScript
+You'll still need Node.js/npm installed on RPi
+For camera access in browser, use the same URL/permission approach as before
+Consider running npm run dev directly in terminal for better performance monitoring
+Better approach: Use Thonny for Python helper scripts, run the app in terminal directly.
