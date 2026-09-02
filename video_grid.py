@@ -2,30 +2,87 @@ import cv2
 import numpy as np
 from picamera2 import Picamera2
 
-# Input camera stream resolution
-FRAME_WIDTH = 640
-FRAME_HEIGHT = 480
+# Frame capture dimensions
+FRAME_WIDTH, FRAME_HEIGHT = 640, 480
 
-# Output flattened board size (square)
-WARP_SIZE = 1080
+# Pre-defined 64 square coordinates: (top-left, top-right, bottom-right, bottom-left)
+BOARD_SQUARES = {
+    (0,0): [(566, 4), (512, 3), (511, 52), (565, 52)],
+    (0,1): [(512, 3), (455, 3), (454, 51), (511, 52)],
+    (0,2): [(455, 3), (387, 2), (387, 51), (454, 51)],
+    (0,3): [(387, 2), (322, 2), (323, 50), (387, 51)],
+    (0,4): [(322, 2), (254, 2), (255, 49), (323, 50)],
+    (0,5): [(254, 2), (188, 1), (190, 49), (255, 49)],
+    (0,6): [(188, 1), (128, 1), (128, 48), (190, 49)],
+    (0,7): [(128, 1), (60, 0), (61, 48), (128, 48)],
+    (1,0): [(565, 52), (511, 52), (510, 115), (564, 115)],
+    (1,1): [(511, 52), (454, 51), (452, 114), (510, 115)],
+    (1,2): [(454, 51), (387, 51), (387, 114), (452, 114)],
+    (1,3): [(387, 51), (323, 50), (323, 113), (387, 114)],
+    (1,4): [(323, 50), (255, 49), (257, 112), (323, 113)],
+    (1,5): [(255, 49), (190, 49), (192, 112), (257, 112)],
+    (1,6): [(190, 49), (128, 48), (128, 111), (192, 112)],
+    (1,7): [(128, 48), (61, 48), (62, 111), (128, 111)],
+    (2,0): [(564, 115), (510, 115), (509, 178), (563, 178)],
+    (2,1): [(510, 115), (452, 114), (451, 178), (509, 178)],
+    (2,2): [(452, 114), (387, 114), (387, 177), (451, 178)],
+    (2,3): [(387, 114), (323, 113), (324, 177), (387, 177)],
+    (2,4): [(323, 113), (257, 112), (258, 176), (324, 177)],
+    (2,5): [(257, 112), (192, 112), (194, 176), (258, 176)],
+    (2,6): [(192, 112), (128, 111), (129, 175), (194, 176)],
+    (2,7): [(128, 111), (62, 111), (63, 175), (129, 175)],
+    (3,0): [(563, 178), (509, 178), (508, 239), (562, 239)],
+    (3,1): [(509, 178), (451, 178), (449, 239), (508, 239)],
+    (3,2): [(451, 178), (387, 177), (387, 239), (449, 239)],
+    (3,3): [(387, 177), (324, 177), (324, 239), (387, 239)],
+    (3,4): [(324, 177), (258, 176), (259, 239), (324, 239)],
+    (3,5): [(258, 176), (194, 176), (196, 239), (259, 239)],
+    (3,6): [(194, 176), (129, 175), (130, 239), (196, 239)],
+    (3,7): [(129, 175), (63, 175), (65, 239), (130, 239)],
+    (4,0): [(562, 239), (508, 239), (506, 306), (560, 306)],
+    (4,1): [(508, 239), (449, 239), (447, 306), (506, 306)],
+    (4,2): [(449, 239), (387, 239), (387, 305), (447, 306)],
+    (4,3): [(387, 239), (324, 239), (324, 305), (387, 305)],
+    (4,4): [(324, 239), (259, 239), (260, 305), (324, 305)],
+    (4,5): [(259, 239), (196, 239), (197, 304), (260, 305)],
+    (4,6): [(196, 239), (130, 239), (130, 304), (197, 304)],
+    (4,7): [(130, 239), (65, 239), (66, 304), (130, 304)],
+    (5,0): [(560, 306), (506, 306), (505, 371), (559, 371)],
+    (5,1): [(506, 306), (447, 306), (445, 371), (505, 371)],
+    (5,2): [(447, 306), (387, 305), (387, 370), (445, 371)],
+    (5,3): [(387, 305), (324, 305), (325, 370), (387, 370)],
+    (5,4): [(324, 305), (260, 305), (262, 370), (325, 370)],
+    (5,5): [(260, 305), (197, 304), (199, 369), (262, 370)],
+    (5,6): [(197, 304), (130, 304), (131, 369), (199, 369)],
+    (5,7): [(130, 304), (66, 304), (67, 368), (131, 369)],
+    (6,0): [(559, 371), (505, 371), (503, 429), (558, 429)],
+    (6,1): [(505, 371), (445, 371), (444, 429), (503, 429)],
+    (6,2): [(445, 371), (387, 370), (387, 429), (444, 429)],
+    (6,3): [(387, 370), (325, 370), (325, 429), (387, 429)],
+    (6,4): [(325, 370), (262, 370), (263, 429), (325, 429)],
+    (6,5): [(262, 370), (199, 369), (201, 429), (263, 429)],
+    (6,6): [(199, 369), (131, 369), (131, 429), (201, 429)],
+    (6,7): [(131, 369), (67, 368), (68, 428), (131, 429)],
+    (7,0): [(558, 429), (503, 429), (502, 477), (557, 477)],
+    (7,1): [(503, 429), (444, 429), (443, 477), (502, 477)],
+    (7,2): [(444, 429), (387, 429), (386, 477), (443, 477)],
+    (7,3): [(387, 429), (325, 429), (326, 477), (386, 477)],
+    (7,4): [(325, 429), (263, 429), (264, 478), (326, 477)],
+    (7,5): [(263, 429), (201, 429), (203, 478), (264, 478)],
+    (7,6): [(201, 429), (131, 429), (132, 478), (203, 478)],
+    (7,7): [(131, 429), (68, 428), (69, 479), (132, 478)]
+}
 
-points = []
-matrix = None
-
-def click_event(event, x, y, flags, params):
-    global matrix
-    if event == cv2.EVENT_LBUTTONDOWN and len(points) < 4:
-        points.append([x, y])
-        print(f"Corner {len(points)} added: ({x}, {y})")
+def draw_predefined_grid(frame, square_dict):
+    """Draws each individual square polygon on the video frame."""
+    for (row, col), corners in square_dict.items():
+        # Convert points to NumPy int32 array for OpenCV
+        pts = np.array(corners, np.int32).reshape((-1, 1, 2))
         
-        # Calculate matrix once 4 points are selected
-        if len(points) == 4:
-            pts1 = np.float32(points)
-            pts2 = np.float32([[0, 0], [WARP_SIZE, 0], [WARP_SIZE, WARP_SIZE], [0, WARP_SIZE]])
-            matrix = cv2.getPerspectiveTransform(pts1, pts2)
-            print("Perspective matrix calculated. Streaming live warped video...")
+        # Draw outer boundary line for each square
+        cv2.polylines(frame, [pts], isClosed=True, color=(0, 255, 0), thickness=1)
 
-# Initialize Pi Camera at 1280x1080
+# Initialize Pi Camera
 picam2 = Picamera2()
 config = picam2.create_preview_configuration(main={"size": (FRAME_WIDTH, FRAME_HEIGHT)})
 picam2.configure(config)
@@ -33,44 +90,16 @@ picam2.configure(config)
 try:
     picam2.start()
     
-    cv2.namedWindow("Live Feed - Click 4 Corners")
-    cv2.setMouseCallback("Live Feed - Click 4 Corners", click_event)
-
-    print("Instructions:")
-    print("1. Click 4 corners clockwise starting from Top-Left on the video feed.")
-    print("2. Press 'c' to clear points and re-calibrate.")
-    print("3. Press 'q' to exit.")
-
     while True:
         frame = picam2.capture_array()
         img = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-        # Draw selected corner markers
-        for pt in points:
-            cv2.circle(img, (pt[0], pt[1]), 8, (0, 0, 255), -1)
+        # Draw grid polygons
+        draw_predefined_grid(img, BOARD_SQUARES)
+        cv2.imshow("Custom Predefined Board Overlay", img)
 
-        cv2.imshow("Live Feed - Click 4 Corners", img)
-
-        # Render flattened video stream when matrix is set
-        if matrix is not None:
-            flattened_board = cv2.warpPerspective(img, matrix, (WARP_SIZE, WARP_SIZE))
-            
-            # Draw 8x8 grid lines on the warped board
-            for i in range(1, 8):
-                spacing = int(WARP_SIZE / 8) * i
-                cv2.line(flattened_board, (spacing, 0), (spacing, WARP_SIZE), (0, 255, 0), 2)
-                cv2.line(flattened_board, (0, spacing), (WARP_SIZE, spacing), (0, 255, 0), 2)
-
-            cv2.imshow("Live Flattened 8x8 Grid", flattened_board)
-
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-        elif key == ord('c'):
-            points = []
-            matrix = None
-            cv2.destroyWindow("Live Flattened 8x8 Grid")
-            print("Calibration reset. Click 4 corners again.")
 
 finally:
     cv2.destroyAllWindows()
