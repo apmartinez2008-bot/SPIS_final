@@ -28,13 +28,13 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
 
     image_diff = cv2.absdiff(img_1, img_2)
     image_diff_gray = cv2.cvtColor(image_diff, cv2.COLOR_BGR2GRAY)
-    _, threshold = cv2.threshold(image_diff_gray, 20, 255, cv2.THRESH_BINARY)
+    _, threshold = cv2.threshold(image_diff_gray, 12, 255, cv2.THRESH_BINARY)
     cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if len(cnts) >= 2:
         required_contours_mid_point = []
         for c in cnts:
-            if cv2.contourArea(c) > 300:
+            if cv2.contourArea(c) > 200:
                 (x, y, w, h) = cv2.boundingRect(c)
                 required_contours_mid_point.append([x + int(w / 2), y + int(h / 2)])
 
