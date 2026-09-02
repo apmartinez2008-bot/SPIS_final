@@ -125,7 +125,7 @@ def map_function():
     np.savez(dir_path + "/map_position.npz", **map_position)
 
 def map_function_for_number_2_position():
-    str1 = "87654321"
+    str1 = "12345678"  # INVERTED: Changed from "87654321"
     str2 = "abcdefgh"
     for i in range(8):
         temp = []
