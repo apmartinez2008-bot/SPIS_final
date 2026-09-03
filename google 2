@@ -374,9 +374,7 @@ q = quit
             img
         )
 
-
         key = cv2.waitKey(1) & 0xFF
-
 
         # Quit
         if key == ord('q'):
