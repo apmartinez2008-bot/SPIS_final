@@ -224,10 +224,20 @@ def process_human_turn(player_name, key_trigger):
     img_1 = capture_frame()
     show_game(img_1, board, last_move)
 
-    print(f"\n{player_name}'s Turn! Move piece on board, then press '{key_trigger}'...")
+    print(f"\n{player_name}'s Turn! Move piece on board, then press '{key_trigger}' (or 'x' to surrender)...")
+    
+    surrendered = False
     while True:
-        if cv2.waitKey(1) == ord(key_trigger):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord(key_trigger):
             break
+        elif key == ord('x') or key == ord('X'):
+            print(f"\n{player_name} has surrendered!")
+            surrendered = True
+            break
+
+    if surrendered:
+        return "surrender"
 
     # Brief delay to allow hand shadows and camera shake to dissipate
     time.sleep(0.3)
@@ -310,14 +320,25 @@ while True:
 ###################################################################################
 ## Main 2-Player Game Loop
 ###################################################################################
+surrender_player = None
+
 try:
     while not board.is_checkmate():
         if board.turn:
-            process_human_turn("White", 'w')
+            result = process_human_turn("White", 'w')
+            if result == "surrender":
+                surrender_player = "White"
+                break
         else:
-            process_human_turn("Black", 'q')
+            result = process_human_turn("Black", 'q')
+            if result == "surrender":
+                surrender_player = "Black"
+                break
 
-    print("Game Over - Checkmate!")
+    if surrender_player:
+        print(f"Game Over - {surrender_player} Surrendered!")
+    else:
+        print("Game Over - Checkmate!")
     
     # 1. Create a PGN game object from the python-chess board stack
     pgn_game = chess.pgn.Game.from_board(board)
@@ -330,7 +351,9 @@ try:
     pgn_game.headers["Black"] = "Black Player"
     
     # Set game result
-    if board.is_checkmate():
+    if surrender_player:
+        pgn_game.headers["Result"] = "0-1" if surrender_player == "White" else "1-0"
+    elif board.is_checkmate():
         pgn_game.headers["Result"] = "1-0" if not board.turn else "0-1"
     else:
         pgn_game.headers["Result"] = "*"
