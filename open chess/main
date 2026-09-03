@@ -100,8 +100,7 @@ BOARD_SQUARES = {
 ###################################################################################
 ## Define Main Variables
 ###################################################################################
-fen_line = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'
-board = chess.Board(fen=fen_line)
+board = chess.Board()
 dir_path = os.path.dirname(os.path.realpath(__file__)) + "/numpy_saved"
 
 number_to_position_map = []
@@ -241,30 +240,60 @@ def process_human_turn(player_name, key_trigger):
     )
 
     if flag:
-        candidate_move = chess.Move.from_uci(str(move_word))
-        
-        # Inverted move fallback (e.g. "a3a2" -> "a2a3")
-        inverted_str = str(move_word)[2:] + str(move_word)[:2]
-        inverted_move = chess.Move.from_uci(inverted_str)
+        raw_word = str(move_word).replace(" ", "").strip()
 
-        if candidate_move in board.legal_moves:
+        # 1. Castling Intercept Logic
+        is_white_ks = "e1" in raw_word and "g1" in raw_word
+        is_white_qs = "e1" in raw_word and "c1" in raw_word
+        is_black_ks = "e8" in raw_word and "g8" in raw_word
+        is_black_qs = "e8" in raw_word and "c8" in raw_word
+
+        castle_move = None
+        if board.turn == chess.WHITE:
+            if is_white_ks: castle_move = chess.Move.from_uci("e1g1")
+            elif is_white_qs: castle_move = chess.Move.from_uci("e1c1")
+        else:
+            if is_black_ks: castle_move = chess.Move.from_uci("e8g8")
+            elif is_black_qs: castle_move = chess.Move.from_uci("e8c8")
+
+        # Execute castling if matched & legal
+        if castle_move and castle_move in board.legal_moves:
+            board.push(castle_move)
+            last_move = str(castle_move)
+            show_game(game_img, board, last_move)
+            print(f"Detected Castling! {player_name} moved: {castle_move}")
+            return
+
+        # 2. Standard 2-Square Move Logic
+        try:
+            candidate_move = chess.Move.from_uci(raw_word)
+        except ValueError:
+            candidate_move = None
+
+        try:
+            inverted_str = raw_word[2:] + raw_word[:2] if len(raw_word) == 4 else ""
+            inverted_move = chess.Move.from_uci(inverted_str) if inverted_str else None
+        except ValueError:
+            inverted_move = None
+
+        if candidate_move and candidate_move in board.legal_moves:
             board.push(candidate_move)
             last_move = str(candidate_move)
             show_game(game_img, board, last_move)
             print(f"{player_name} moved: {candidate_move}")
-            
-        elif inverted_move in board.legal_moves:
+
+        elif inverted_move and inverted_move in board.legal_moves:
             board.push(inverted_move)
             last_move = str(inverted_move)
             show_game(game_img, board, last_move)
             print(f"Corrected inverted move! {player_name} moved: {inverted_move}")
-            
+
         else:
-            print("Illegal Move Detected! Reset physical pieces...")
+            print(f"Illegal Move Detected ('{raw_word}')! Reset physical pieces...")
             show_game(img_2, board, last_move)
     else:
-        print("No valid move detected. Try again.")
-        show_game(game_img, board, last_move)
+        print("No move detected. Please try again.")
+        show_game(img_1, board, last_move)
 
 ###################################################################################
 ## Preview Alignment Check
