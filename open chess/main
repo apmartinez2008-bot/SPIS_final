@@ -3,8 +3,10 @@
 ###################################################################################
 import os
 import chess
+import chess.pgn
 import cv2
 import numpy as np
+import time
 from picamera2 import Picamera2
 
 ###################################################################################
@@ -117,20 +119,22 @@ if not os.path.exists(dir_path):
 
 def map_function():
     x, y = 0, 0
-    for i in "87654321":
-        for j in "abcdefgh":
-            map_position[j + i] = [x, y]
+    # Files map across rows, Ranks map across columns
+    for i in "abcdefgh":
+        for j in "87654321":
+            map_position[i + j] = [x, y]
             y = (y + 1) % 8
         x = (x + 1) % 8
     np.savez(dir_path + "/map_position.npz", **map_position)
 
 def map_function_for_number_2_position():
-    str1 = "12345678"  # INVERTED: Changed from "87654321"
-    str2 = "abcdefgh"
+    files = "abcdefgh"
+    ranks = "87654321"
     for i in range(8):
         temp = []
         for j in range(8):
-            temp.append(str(str2[j] + str1[i]))
+            # Row i -> files[i], Column j -> ranks[j]
+            temp.append(str(files[i] + ranks[j]))
         number_to_position_map.append(temp)
 
 map_function()
@@ -226,6 +230,9 @@ def process_human_turn(player_name, key_trigger):
         if cv2.waitKey(1) == ord(key_trigger):
             break
 
+    # Brief delay to allow hand shadows and camera shake to dissipate
+    time.sleep(0.3)
+
     # Post-move snapshot
     img_2 = capture_frame()
 
@@ -234,12 +241,24 @@ def process_human_turn(player_name, key_trigger):
     )
 
     if flag:
-        move = chess.Move.from_uci(str(move_word))
-        if move in board.legal_moves:
-            board.push(move)
-            last_move = str(move_word)
+        candidate_move = chess.Move.from_uci(str(move_word))
+        
+        # Inverted move fallback (e.g. "a3a2" -> "a2a3")
+        inverted_str = str(move_word)[2:] + str(move_word)[:2]
+        inverted_move = chess.Move.from_uci(inverted_str)
+
+        if candidate_move in board.legal_moves:
+            board.push(candidate_move)
+            last_move = str(candidate_move)
             show_game(game_img, board, last_move)
-            print(f"{player_name} moved: {move_word}")
+            print(f"{player_name} moved: {candidate_move}")
+            
+        elif inverted_move in board.legal_moves:
+            board.push(inverted_move)
+            last_move = str(inverted_move)
+            show_game(game_img, board, last_move)
+            print(f"Corrected inverted move! {player_name} moved: {inverted_move}")
+            
         else:
             print("Illegal Move Detected! Reset physical pieces...")
             show_game(img_2, board, last_move)
@@ -270,6 +289,40 @@ try:
             process_human_turn("Black", 'q')
 
     print("Game Over - Checkmate!")
+    
+    # 1. Create a PGN game object from the python-chess board stack
+    pgn_game = chess.pgn.Game.from_board(board)
+    
+    # 2. Add standard PGN Headers
+    pgn_game.headers["Event"] = f"Vision Chess Session {code}"
+    pgn_game.headers["Site"] = "Raspberry Pi Tracker"
+    pgn_game.headers["Date"] = time.strftime("%Y.%m.%d")
+    pgn_game.headers["White"] = "White Player"
+    pgn_game.headers["Black"] = "Black Player"
+    
+    # Set game result
+    if board.is_checkmate():
+        pgn_game.headers["Result"] = "1-0" if not board.turn else "0-1"
+    else:
+        pgn_game.headers["Result"] = "*"
+
+    # 3. Export to .pgn file inside your session directory
+    pgn_path = os.path.join(dir_path, f"game_{code}.pgn")
+    with open(pgn_path, "w") as pgn_file:
+        exporter = chess.pgn.FileExporter(pgn_file)
+        pgn_game.accept(exporter)
+
+    print(f"PGN successfully saved to: {pgn_path}")
+    
+    # Print direct Chessigma instructions and URL
+    print("\n" + "="*50)
+    print("GAME ANALYSIS LINK:")
+    print("https://chessigma.com/")
+    print("\nCopy and paste the PGN below into Chessigma:")
+    print("-" * 50)
+    print(str(pgn_game))
+    print("="*50 + "\n")
+
     img = capture_frame()
     show_game(img, board, last_move)
     cv2.waitKey(0)
