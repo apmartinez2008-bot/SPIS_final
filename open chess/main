@@ -274,32 +274,50 @@ def process_human_turn(player_name, key_trigger):
             print(f"Detected Castling! {player_name} moved: {castle_move}")
             return
 
-        # 2. Standard 2-Square Move Logic
-        try:
-            candidate_move = chess.Move.from_uci(raw_word)
-        except ValueError:
-            candidate_move = None
+        # 2. Filter Candidate Moves Against Valid Legal Moves
+        matched_move = None
+        best_extra_count = None
 
-        try:
-            inverted_str = raw_word[2:] + raw_word[:2] if len(raw_word) == 4 else ""
-            inverted_move = chess.Move.from_uci(inverted_str) if inverted_str else None
-        except ValueError:
-            inverted_move = None
+        # Parse all detected square strings into a clean set (e.g. {'f3', 'g2', 'g1'})
+        detected_squares = set(raw_word[i:i+2] for i in range(0, len(raw_word), 2))
 
-        if candidate_move and candidate_move in board.legal_moves:
-            board.push(candidate_move)
-            last_move = str(candidate_move)
+        for legal_move in board.legal_moves:
+            uci_str = legal_move.uci()
+            from_sq = uci_str[:2]
+            to_sq = uci_str[2:4]
+
+            # Skip non-relocations
+            if legal_move.from_square == legal_move.to_square:
+                continue
+
+            # Verify both start and end squares were flagged as changed by the camera
+            if from_sq in detected_squares and to_sq in detected_squares:
+
+                # Any detected squares beyond from/to are noise: hand shadows, camera
+                # shake, or a piece getting bumped and set back down. Rather than
+                # accepting the first legal move that fits (which can be wrong if a
+                # bump happens to overlap another move's squares), score every
+                # candidate by how much unexplained noise it leaves behind and keep
+                # the cleanest match.
+                extra_squares = detected_squares - {from_sq, to_sq}
+                extra_count = len(extra_squares)
+
+                if best_extra_count is None or extra_count < best_extra_count:
+                    matched_move = legal_move
+                    best_extra_count = extra_count
+
+                    # Can't do better than zero leftover squares - stop early
+                    if best_extra_count == 0:
+                        break
+
+        if matched_move:
+            board.push(matched_move)
+            last_move = str(matched_move)
             show_game(game_img, board, last_move)
-            print(f"{player_name} moved: {candidate_move}")
-
-        elif inverted_move and inverted_move in board.legal_moves:
-            board.push(inverted_move)
-            last_move = str(inverted_move)
-            show_game(game_img, board, last_move)
-            print(f"Corrected inverted move! {player_name} moved: {inverted_move}")
+            print(f"{player_name} moved: {matched_move}")
 
         else:
-            print(f"Illegal Move Detected ('{raw_word}')! Reset physical pieces...")
+            print(f"No valid piece relocation detected (or illegal move: '{raw_word}').")
             show_game(img_2, board, last_move)
     else:
         print("No move detected. Please try again.")
