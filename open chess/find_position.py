@@ -30,7 +30,7 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
     image_diff = cv2.absdiff(img_1, img_2)
     image_diff_gray = cv2.cvtColor(image_diff, cv2.COLOR_BGR2GRAY)
     
-    _, threshold = cv2.threshold(image_diff_gray, 17, 255, cv2.THRESH_BINARY)
+    _, threshold = cv2.threshold(image_diff_gray, 20, 255, cv2.THRESH_BINARY)
     cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     cv2.imshow("Difference Debugger", threshold)
@@ -81,7 +81,16 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
             elif "c8" in detected_squares:
                 return "e8c8", draw_img, 1  # Queenside Castle
 
-    # 4. Standard Move Handling (Exactly 2 Squares)
+    # 4. Standard Move Handling (2 Squares) + Noisy/Bumped Moves (3+ Squares)
+    #
+    # A clean move flips exactly 2 squares. A bumped piece, hand shadow, or
+    # camera shake can flip additional squares that aren't part of the real
+    # move. Previously any count other than exactly 2 was discarded here
+    # (flag=0, "No move detected"), which meant main.py's legal-move scoring
+    # never even ran on bumped moves - the noise never made it that far.
+    # Instead, report every detected square and let main.py's candidate
+    # scoring (fewest unexplained extra squares) pick the real move out of
+    # the noise.
     if len(changed_rows) == 2:
         sq1 = (changed_rows[0], changed_cols[0])
         sq2 = (changed_rows[1], changed_cols[1])
@@ -104,6 +113,21 @@ def find_current_past_position(img_1, img_2, board_squares, bool_position, FEN_l
         pts2 = np.array(board_squares[(r2, c2)], np.int32).reshape((-1, 1, 2))
         cv2.polylines(draw_img, [pts1], True, (0, 0, 255), 2)
         cv2.polylines(draw_img, [pts2], True, (0, 255, 0), 2)
+
+        return move_word, draw_img, 1
+
+    elif len(changed_rows) > 2:
+        # Don't try to guess which 2 squares are "the" move here - main.py
+        # doesn't need ordered from/to, it only needs the full set of
+        # detected squares to score legal-move candidates against. Just
+        # report everything that changed.
+        move_word = "".join(
+            number_to_position_map[r][c] for r, c in zip(changed_rows, changed_cols)
+        )
+
+        for r, c in zip(changed_rows, changed_cols):
+            pts = np.array(board_squares[(r, c)], np.int32).reshape((-1, 1, 2))
+            cv2.polylines(draw_img, [pts], True, (0, 165, 255), 2)  # orange = noisy/extra square
 
         return move_word, draw_img, 1
 
