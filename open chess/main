@@ -227,6 +227,8 @@ def process_human_turn(player_name, key_trigger):
     print(f"\n{player_name}'s Turn! Move piece on board, then press '{key_trigger}' (or 'x' to surrender)...")
     
     surrendered = False
+    undo_requested = False
+
     while True:
         key = cv2.waitKey(1) & 0xFF
         if key == ord(key_trigger):
@@ -235,9 +237,23 @@ def process_human_turn(player_name, key_trigger):
             print(f"\n{player_name} has surrendered!")
             surrendered = True
             break
+        elif key == ord('b') or key == ord('B'):
+            if len(board.move_stack) > 0:
+                undo_requested = True
+                break
+            else:
+                print("\nCannot undo: No moves have been played yet!")
 
     if surrendered:
         return "surrender"
+
+    if undo_requested:
+        undone_move = board.pop()
+        # Update last_move display string to reflect the move prior to the undone one
+        last_move = str(board.peek()) if len(board.move_stack) > 0 else ""
+        print(f"\n[UNDO] Undid last move: {undone_move}")
+        show_game(capture_frame(), board, last_move)
+        return "undo"
 
     # Brief delay to allow hand shadows and camera shake to dissipate
     time.sleep(0.3)
